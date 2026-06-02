@@ -1,0 +1,135 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to roll back.
+        required: true
+        type: choice
+        options:
+          - nprd
+          - prd
+      release_version:
+        description: Optional semantic release version to roll back to in prd, for example 1.2.3 or v1.2.3.
+        required: false
+        type: string
+      image:
+        description: Optional full Artifact Registry image tag or digest to deploy.
+        required: false
+        type: string
+      service_version:
+        description: Required when deploying a custom image. Sets the runtime service.version value.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  config:
+    name: Resolve config ${{ inputs.environment }}
+    permissions:
+      contents: read
+    uses: Tribore-AI/platform-infra/.github/workflows/gcp-cloud-run-config-reusable-workflow.yml@main
+    with:
+      app: ${{ github.event.repository.name }}
+      environment: ${{ inputs.environment }}
+      platform_infra_client_id: ${{ vars.PLATFORM_INFRA_CLIENT_ID }}
+    secrets:
+      PLATFORM_INFRA_APP_PRIVATE_KEY: ${{ secrets.PLATFORM_INFRA_APP_PRIVATE_KEY }}
+
+  rollback:
+    name: Rollback ${{ inputs.environment }}
+    needs: config
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      DEPLOY_ENV: ${{ inputs.environment }}
+    steps:
+      - name: Validate configuration
+        run: |
+          test -n "${{ needs.config.outputs.project_id }}" || { echo "project_id is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.region }}" || { echo "region is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.workload_identity_provider }}" || { echo "workload_identity_provider is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.service_account }}" || { echo "service_account is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.artifact_registry_repository }}" || { echo "artifact_registry_repository is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.cloud_run_service }}" || { echo "cloud_run_service is required" >&2; exit 2; }
+
+      - name: Resolve rollback target
+        id: target
+        run: |
+          image_input="${{ inputs.image || '' }}"
+          release_input="${{ inputs.release_version || '' }}"
+          service_version_input="${{ inputs.service_version || '' }}"
+
+          if [[ -n "$image_input" && -n "$release_input" ]]; then
+            echo "Provide either release_version or image, not both." >&2
+            exit 2
+          fi
+
+          if [[ -z "$image_input" && -z "$release_input" ]]; then
+            echo "Either release_version or image is required." >&2
+            exit 2
+          fi
+
+          image_base="${{ needs.config.outputs.region }}-docker.pkg.dev/${{ needs.config.outputs.project_id }}/${{ needs.config.outputs.artifact_registry_repository }}/${{ github.event.repository.name }}"
+
+          if [[ -n "$release_input" ]]; then
+            if [[ "$DEPLOY_ENV" != "prd" ]]; then
+              echo "release_version rollback is only supported for prd. Use image and service_version for nprd." >&2
+              exit 2
+            fi
+
+            release_tag="$release_input"
+            if [[ "$release_tag" != v* ]]; then
+              release_tag="v${release_tag}"
+            fi
+
+            [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "release_version must be semantic version like 1.2.3 or v1.2.3" >&2
+              exit 2
+            }
+
+            image="${image_base}:${release_tag}"
+            service_version="$release_tag"
+          else
+            image="$image_input"
+            service_version="$service_version_input"
+            test -n "$service_version" || {
+              echo "service_version is required when deploying a custom image." >&2
+              exit 2
+            }
+          fi
+
+          {
+            echo "image=${image}"
+            echo "service_version=${service_version}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3.0.0
+        with:
+          workload_identity_provider: ${{ needs.config.outputs.workload_identity_provider }}
+          service_account: ${{ needs.config.outputs.service_account }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3.0.1
+
+      - name: Deploy selected image
+        run: |
+          gcloud run deploy "${{ needs.config.outputs.cloud_run_service }}" \
+            --project="${{ needs.config.outputs.project_id }}" \
+            --region="${{ needs.config.outputs.region }}" \
+            --image="${{ steps.target.outputs.image }}" \
+            --update-env-vars="SERVICE_VERSION=${{ steps.target.outputs.service_version }}" \
+            --platform=managed \
+            --quiet
