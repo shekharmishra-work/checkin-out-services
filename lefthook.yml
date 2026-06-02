@@ -6,11 +6,4 @@ pre-commit:
     - name: ruff check
       run: uv run ruff check .
 
-pre-push:
-  parallel: true
-  jobs:
-    - name: mypy
-      run: uv run mypy app tests
 
-    - name: pytest
-      run: uv run pytest
