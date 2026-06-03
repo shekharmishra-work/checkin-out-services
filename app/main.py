@@ -42,14 +42,14 @@ def preprocess_image(file_bytes: bytes) -> Image.Image:
             ratio = MAX_IMAGE_PX / max(w, h)
             new_w, new_h = int(w * ratio), int(h * ratio)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        
+
         buffer = io.BytesIO()
         img.save(buffer, format="JPEG", quality=JPEG_QUALITY)
         buffer.seek(0)
         return Image.open(buffer)
     except Exception as e:
         logger.error(f"Image preprocessing failed: {e}")
-        raise ValueError(f"Invalid image file: {e}")
+        raise ValueError(f"Invalid image file: {e}") from e
 
 
 def build_prompt(num_images: int) -> str:
@@ -101,7 +101,7 @@ async def validate_images(files: List[UploadFile] = File(...)) -> Any:
             img = preprocess_image(file_bytes)
             pil_images.append(img)
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     # 2. Configure Gemini
     try:
@@ -110,9 +110,9 @@ async def validate_images(files: List[UploadFile] = File(...)) -> Any:
     except RuntimeError as e:
         logger.error("API configuration error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Server configuration error"
-        )
+        ) from e
 
     # 3. Call Gemini
     prompt = build_prompt(len(pil_images))
@@ -120,35 +120,35 @@ async def validate_images(files: List[UploadFile] = File(...)) -> Any:
 
     try:
         response = model.generate_content(contents)
-    except api_exceptions.ResourceExhausted:
+    except api_exceptions.ResourceExhausted as e:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="API quota exceeded. Please try again later."
-        )
-    except api_exceptions.ServiceUnavailable:
+        ) from e
+    except api_exceptions.ServiceUnavailable as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Vision API is currently unavailable."
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Validation failed: {str(e)}"
-        )
+        ) from e
 
     # 4. Parse JSON Response
     raw_text = response.text
     # Clean markdown fences if present
     cleaned = re.sub(r"^```(?:json)?\n", "", raw_text)
     cleaned = re.sub(r"\n```$", "", cleaned)
-    
+
     try:
         result = json.loads(cleaned)
         return {"success": True, "results": result}
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON. Raw response: {raw_text}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to parse AI response"
-        )
+        ) from e
