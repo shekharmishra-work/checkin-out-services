@@ -7,13 +7,14 @@ import io
 import json
 import os
 import re
-import time
 import threading
-import streamlit as st
-from PIL import Image
+import time
+
 import google.generativeai as genai
-from google.api_core import exceptions as api_exceptions
+import streamlit as st
 from dotenv import load_dotenv
+from google.api_core import exceptions as api_exceptions
+from PIL import Image
 
 load_dotenv()
 
@@ -240,7 +241,7 @@ def thumbnail_grid(files: list) -> None:
     for row_start in range(0, len(files), THUMBS_PER_ROW):
         chunk = files[row_start : row_start + THUMBS_PER_ROW]
         cols = st.columns(THUMBS_PER_ROW)
-        for col, f in zip(cols, chunk):
+        for col, f in zip(cols, chunk, strict=False):
             img = Image.open(io.BytesIO(f.getvalue()))
             col.image(img, use_column_width=True)
             col.markdown(
