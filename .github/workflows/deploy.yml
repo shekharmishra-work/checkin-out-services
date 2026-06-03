@@ -1,0 +1,206 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy.
+        required: true
+        type: choice
+        options:
+          - nprd
+          - prd
+        default: nprd
+      git_ref:
+        description: Optional branch, tag, or commit SHA to deploy. Any branch can be deployed manually to nprd.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  config:
+    name: Resolve config ${{ github.event_name == 'push' && 'nprd' || inputs.environment }}
+    permissions:
+      contents: read
+    uses: Tribore-AI/platform-infra/.github/workflows/gcp-cloud-run-config-reusable-workflow.yml@main
+    with:
+      app: ${{ github.event.repository.name }}
+      environment: ${{ github.event_name == 'push' && 'nprd' || inputs.environment }}
+      platform_infra_client_id: ${{ vars.PLATFORM_INFRA_CLIENT_ID }}
+    secrets:
+      PLATFORM_INFRA_APP_PRIVATE_KEY: ${{ secrets.PLATFORM_INFRA_APP_PRIVATE_KEY }}
+
+  deploy:
+    name: Deploy ${{ github.event_name == 'push' && 'nprd' || inputs.environment }}
+    needs: config
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'push' && 'nprd' || inputs.environment }}
+    concurrency:
+      group: deploy-${{ github.event_name == 'push' && 'nprd' || inputs.environment }}
+      cancel-in-progress: false
+    env:
+      DEPLOY_ENV: ${{ github.event_name == 'push' && 'nprd' || inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_ref || github.sha }}
+
+      - name: Validate configuration
+        run: |
+          test -n "${{ needs.config.outputs.project_id }}" || { echo "project_id is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.region }}" || { echo "region is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.workload_identity_provider }}" || { echo "workload_identity_provider is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.service_account }}" || { echo "service_account is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.artifact_registry_repository }}" || { echo "artifact_registry_repository is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.cloud_run_service }}" || { echo "cloud_run_service is required" >&2; exit 2; }
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3.0.0
+        with:
+          workload_identity_provider: ${{ needs.config.outputs.workload_identity_provider }}
+          service_account: ${{ needs.config.outputs.service_account }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3.0.1
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker "${{ needs.config.outputs.region }}-docker.pkg.dev" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.0.0
+
+      - name: Resolve deployment metadata
+        id: metadata
+        run: |
+          source_sha="$(git rev-parse HEAD)"
+          short_sha="${source_sha::7}"
+          image_base="${{ needs.config.outputs.region }}-docker.pkg.dev/${{ needs.config.outputs.project_id }}/${{ needs.config.outputs.artifact_registry_repository }}/${{ github.event.repository.name }}"
+          service_version="sha-${short_sha}"
+          release_tag=""
+
+          if [[ "$DEPLOY_ENV" == "prd" ]]; then
+            git fetch origin main --tags --force
+            git merge-base --is-ancestor "$source_sha" "origin/main" || {
+              echo "Production releases must target a commit already merged to main." >&2
+              exit 2
+            }
+
+            release_tag="$(git tag --points-at "$source_sha" --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+            if [[ -z "$release_tag" ]]; then
+              latest_tag="$(git tag --merged "$source_sha" --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+              if [[ -n "$latest_tag" ]]; then
+                version_core="${latest_tag#v}"
+                commit_range="${latest_tag}..${source_sha}"
+              else
+                version_core="0.0.0"
+                commit_range="$source_sha"
+              fi
+
+              IFS='.' read -r major minor patch <<< "$version_core"
+              bump="patch"
+
+              if git log --format=%B "$commit_range" | grep -Eq 'BREAKING CHANGE|^[^[:space:]]+(\([^)]*\))?!:'; then
+                bump="major"
+              elif git log --format=%s "$commit_range" | grep -Eq '^feat(\([^)]*\))?:'; then
+                bump="minor"
+              fi
+
+              case "$bump" in
+                major)
+                  major=$((major + 1))
+                  minor=0
+                  patch=0
+                  ;;
+                minor)
+                  minor=$((minor + 1))
+                  patch=0
+                  ;;
+                patch)
+                  patch=$((patch + 1))
+                  ;;
+              esac
+
+              release_tag="v${major}.${minor}.${patch}"
+            fi
+
+            if git ls-remote --exit-code --tags origin "refs/tags/${release_tag}" >/dev/null 2>&1; then
+              tagged_sha="$(git rev-list -n 1 "$release_tag")"
+              if [[ "$tagged_sha" != "$source_sha" ]]; then
+                echo "Resolved release tag ${release_tag} already exists on a different commit." >&2
+                exit 2
+              fi
+            fi
+
+            service_version="$release_tag"
+          fi
+
+          {
+            echo "source_sha=${source_sha}"
+            echo "image_base=${image_base}"
+            echo "service_version=${service_version}"
+            echo "release_tag=${release_tag}"
+            printf 'tags<<EOF\n'
+            echo "${image_base}:sha-${short_sha}"
+            echo "${image_base}:${DEPLOY_ENV}"
+            if [[ -n "$release_tag" ]]; then
+              echo "${image_base}:${release_tag}"
+            fi
+            printf 'EOF\n'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v7.1.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.metadata.outputs.source_sha }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.service_version }}
+
+      - name: Deploy Cloud Run
+        run: |
+          gcloud run deploy "${{ needs.config.outputs.cloud_run_service }}" \
+            --project="${{ needs.config.outputs.project_id }}" \
+            --region="${{ needs.config.outputs.region }}" \
+            --image="${{ steps.metadata.outputs.image_base }}@${{ steps.build.outputs.digest }}" \
+            --update-env-vars="SERVICE_VERSION=${{ steps.metadata.outputs.service_version }}" \
+            --platform=managed \
+            --quiet
+
+      - name: Check existing GitHub release
+        if: ${{ steps.metadata.outputs.release_tag != '' }}
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.metadata.outputs.release_tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        if: ${{ steps.metadata.outputs.release_tag != '' && steps.release.outputs.exists != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.metadata.outputs.release_tag }}" \
+            --target "${{ steps.metadata.outputs.source_sha }}" \
+            --title "${{ steps.metadata.outputs.release_tag }}" \
+            --generate-notes
