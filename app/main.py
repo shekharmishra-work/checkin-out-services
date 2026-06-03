@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, List
+from typing import Any
 
 import google.generativeai as genai
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
@@ -56,14 +56,14 @@ def build_prompt(num_images: int) -> str:
     return f"""
     You are an expert AI vehicle inspector.
     I am providing {num_images} image(s) of an electric taxi fleet vehicle.
-    
+
     For EACH image, determine:
     1. Is it a clear photo of a vehicle? (Reject if it's blurry, pitch black, or clearly not a car).
     2. If it is rejected, provide a very short reason.
-    
+
     You MUST output your response as a strict JSON array of objects.
     Do not include markdown blocks like ```json.
-    
+
     Example output format:
     [
       {{"index": 1, "valid": true, "reason": null}},
@@ -86,7 +86,7 @@ async def healthz() -> dict[str, str]:
 
 
 @app.post("/validate")
-async def validate_images(files: List[UploadFile] = File(...)) -> Any:
+async def validate_images(files: list[UploadFile] = File(...)) -> Any:
     """
     Validates a batch of uploaded EV taxi images using Gemini Vision.
     """
