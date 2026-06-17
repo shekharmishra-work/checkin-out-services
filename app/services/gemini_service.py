@@ -444,7 +444,6 @@ def validate_and_assess(
         AssessConditionResult,
         ImageResult,
         SubmissionSummary,
-        VehicleCondition,
     )
 
     # ── Call 1: per-image gate check (identical logic to /api/v1/validate-images) ──
