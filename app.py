@@ -4,6 +4,7 @@ Uploads images to the local FastAPI backend.
 """
 
 import io
+
 import requests
 import streamlit as st
 from PIL import Image
@@ -98,7 +99,7 @@ def thumbnail_grid(files: list) -> None:
     for row_start in range(0, len(files), THUMBS_PER_ROW):
         chunk = files[row_start : row_start + THUMBS_PER_ROW]
         cols = st.columns(THUMBS_PER_ROW)
-        for col, f in zip(cols, chunk):
+        for col, f in zip(cols, chunk, strict=False):
             img = Image.open(io.BytesIO(f.getvalue()))
             col.image(img, use_container_width=True)
             col.markdown(
@@ -152,46 +153,48 @@ if uploaded_files:
                 for f in uploaded_files:
                     # FastAPI expects 'images' as the form field name
                     files_payload.append(("images", (f.name, f.getvalue(), f.type)))
-                
+
                 # Make the POST request
                 response = requests.post(api_endpoint, files=files_payload)
-                
+
             if response.status_code == 200:
                 data = response.json()
-                
+
                 st.markdown('<div class="glass">', unsafe_allow_html=True)
                 st.write("### 📊 API Response")
-                
+
                 tab1, tab2, tab3 = st.tabs(["Overview", "Identity", "Detailed Results"])
-                
+
                 with tab1:
                     st.write("#### Submission Summary")
                     st.json(data.get("submission_summary", {}))
-                
+
                 with tab2:
                     st.write("#### Vehicle Identity Check")
                     st.json(data.get("identity", {}))
-                
+
                 with tab3:
                     st.write("#### Individual Image Results")
                     for res in data.get("results", []):
                         val = res.get("validation", {})
                         meta = res.get("metadata", {})
-                        
+
                         st.markdown(f"**{res.get('filename')} (Index {res.get('index')})**")
-                        
+
                         if val.get("valid"):
-                            st.success(f"✅ Valid | Plate: {val.get('plate')} | Color: {val.get('color')}")
+                            st.success(
+                                f"✅ Valid | Plate: {val.get('plate')} | Color: {val.get('color')}"
+                            )
                         else:
                             st.error(f"❌ Invalid | Reason: {val.get('reason')}")
-                            
+
                         if val.get("damage_detected"):
                             st.warning(f"⚠️ Damage Flagged: {val.get('damage_details')}")
-                            
+
                         with st.expander("Show EXIF Metadata"):
                             st.json(meta)
                         st.markdown("---")
-                
+
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.error(f"API Error {response.status_code}: {response.text}")

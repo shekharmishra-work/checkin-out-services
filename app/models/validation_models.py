@@ -18,7 +18,7 @@ class MetadataResult(BaseModel):
     capture_date: date | None       # parsed from EXIF DateTimeOriginal, None if absent
     current_date: date              # datetime.date.today() at time of request, always present
     is_same_day: bool                # capture_date == current_date, False if capture_date is None
-    meta_reason: str | None          # short text only when has_exif is False or capture_date is None
+    meta_reason: str | None          # short text when has_exif is False or capture_date is None
 
 
 # ── Gemini vision ─────────────────────────────────────────────────────────────

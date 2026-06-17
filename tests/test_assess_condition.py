@@ -51,7 +51,7 @@ def _make_raw_parts(
 ) -> list[dict[str, object]]:
     """Build a valid 25-part JSON payload as Gemini would return it."""
     parts: list[dict[str, object]] = []
-    for i, name in enumerate(_ALL_PARTS[:count]):
+    for _i, name in enumerate(_ALL_PARTS[:count]):
         is_damaged = name == damaged_part
         parts.append(
             {
