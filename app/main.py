@@ -10,7 +10,10 @@ from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from google.api_core import exceptions as api_exceptions
 from PIL import Image
 
+from app.routers.image_validation import router as image_validation_router
+
 app = FastAPI(title="EV Taxi Image Validator API", version="0.1.0")
+app.include_router(image_validation_router)
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 MODEL_NAME = "gemini-2.5-flash"
@@ -22,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 def get_api_key() -> str:
     """Read API key from environment variables (Cloud Run will inject this)."""
+    from pathlib import Path
+
+    from dotenv import load_dotenv
+    dotenv_path = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(dotenv_path=dotenv_path, override=True)
     key = os.environ.get("GOOGLE_API_KEY")
     if not key:
         raise RuntimeError("GOOGLE_API_KEY environment variable is not set")
