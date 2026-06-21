@@ -1,7 +1,7 @@
 [project]
-name = "fastapi-cloud-run-template"
+name = "checkin-out-services"
 version = "0.1.0"
-description = "API-only FastAPI template for GCP Cloud Run with Grafana Cloud observability."
+description = "EV taxi image validation service for check-in/check-out workflows."
 readme = "README.md"
 requires-python = ">=3.13,<4.0"
 dependencies = [
