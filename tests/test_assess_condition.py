@@ -57,6 +57,7 @@ def _make_raw_parts(
             {
                 "part": name,
                 "visible_in_image": True,
+                "source_image_index": 1,
                 "damaged": is_damaged,
                 "damage_types": (damage_types or ["dent"]) if is_damaged else [],
                 "severity": severity if is_damaged else 0,
@@ -109,6 +110,7 @@ def _fake_vehicle_condition() -> VehicleCondition:
         PartCondition(
             part=VehiclePart(name),
             visible_in_image=True,
+            source_image_index=1,
             damaged=(i == 0),
             damage_types=[DamageType.dent] if i == 0 else [],
             severity=2 if i == 0 else 0,
@@ -132,9 +134,7 @@ def test_assess_vehicle_condition_valid_25_parts() -> None:
     raw_parts[0]["severity"] = 1
 
     mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(
-        text=json.dumps(raw_parts)
-    )
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
 
     with (
         patch("app.services.gemini_service._get_api_key", return_value="test-key"),
@@ -157,9 +157,7 @@ def test_assess_vehicle_condition_24_parts_raises() -> None:
     raw_parts = _make_raw_parts(count=24)  # only 24 parts
 
     mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(
-        text=json.dumps(raw_parts)
-    )
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
 
     with (
         patch("app.services.gemini_service._get_api_key", return_value="test-key"),
@@ -179,9 +177,7 @@ def test_assess_vehicle_condition_unknown_part_raises() -> None:
     raw_parts[0]["part"] = "flying_door"  # not a valid VehiclePart
 
     mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(
-        text=json.dumps(raw_parts)
-    )
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
 
     with (
         patch("app.services.gemini_service._get_api_key", return_value="test-key"),
@@ -209,9 +205,7 @@ def test_assess_vehicle_condition_inconsistent_flags_does_not_crash() -> None:
     raw_parts[5]["severity"] = 0
 
     mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(
-        text=json.dumps(raw_parts)
-    )
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
 
     with (
         patch("app.services.gemini_service._get_api_key", return_value="test-key"),
@@ -234,9 +228,7 @@ def test_assess_vehicle_condition_all_zero_severity() -> None:
     raw_parts = _make_raw_parts()  # no damaged_part specified → all severity=0
 
     mock_model = MagicMock()
-    mock_model.generate_content.return_value = MagicMock(
-        text=json.dumps(raw_parts)
-    )
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
 
     with (
         patch("app.services.gemini_service._get_api_key", return_value="test-key"),
@@ -334,9 +326,7 @@ def test_assess_condition_endpoint_returns_200_with_correct_shape() -> None:
     AssessConditionResult shape with vehicle_condition present."""
     n = 2
     fake_vc = _fake_vehicle_condition()
-    files = [
-        ("images", (f"img_{i}.jpg", _jpeg_bytes(), "image/jpeg")) for i in range(n)
-    ]
+    files = [("images", (f"img_{i}.jpg", _jpeg_bytes(), "image/jpeg")) for i in range(n)]
 
     with patch(
         "app.routers.image_validation.validate_and_assess",
@@ -346,9 +336,7 @@ def test_assess_condition_endpoint_returns_200_with_correct_shape() -> None:
             ).SubmissionSummary(total=n, passed=n, failed=0, damage_flagged=1),
             identity=_fake_identity(),
             results=[
-                __import__(
-                    "app.models.validation_models", fromlist=["ImageResult"]
-                ).ImageResult(
+                __import__("app.models.validation_models", fromlist=["ImageResult"]).ImageResult(
                     index=i + 1,
                     filename=f"img_{i}.jpg",
                     validation=_fake_validation_results(n)[i],
@@ -380,6 +368,7 @@ def test_assess_condition_endpoint_returns_200_with_correct_shape() -> None:
     for part in vc["parts"]:
         assert "part" in part
         assert "visible_in_image" in part
+        assert "source_image_index" in part
         assert "damaged" in part
         assert "damage_types" in part
         assert "severity" in part
@@ -392,3 +381,127 @@ def test_assess_condition_endpoint_returns_200_with_correct_shape() -> None:
         assert "filename" in result
         assert "validation" in result
         assert "metadata" in result
+
+
+# ── Test 9: Image Attribution tests ──────────────────────────────────────────
+
+
+def test_assess_vehicle_condition_visible_true_valid_index() -> None:
+    """Part visible=true with valid source_image_index in range -> parses correctly."""
+    raw_parts = _make_raw_parts()
+    # already has visible_in_image=True and source_image_index=1
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
+    with (
+        patch("app.services.gemini_service._get_api_key", return_value="test-key"),
+        patch("app.services.gemini_service.genai") as mock_genai,
+    ):
+        mock_genai.GenerativeModel.return_value = mock_model
+        result = assess_vehicle_condition([_jpeg_bytes(), _jpeg_bytes()])
+    assert result.parts[0].source_image_index == 1
+
+
+def test_assess_vehicle_condition_visible_true_null_index_raises() -> None:
+    """Part visible=true but source_image_index is null -> raises ValueError."""
+    raw_parts = _make_raw_parts()
+    raw_parts[0]["visible_in_image"] = True
+    raw_parts[0]["source_image_index"] = None
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
+    with (
+        patch("app.services.gemini_service._get_api_key", return_value="test-key"),
+        patch("app.services.gemini_service.genai") as mock_genai,
+    ):
+        mock_genai.GenerativeModel.return_value = mock_model
+        with pytest.raises(ValueError, match="marked visible but source_image_index is missing"):
+            assess_vehicle_condition([_jpeg_bytes(), _jpeg_bytes()])
+
+
+def test_assess_vehicle_condition_visible_true_out_of_range_index_raises() -> None:
+    """Part visible=true with source_image_index out of range -> raises ValueError."""
+    raw_parts = _make_raw_parts()
+    raw_parts[0]["visible_in_image"] = True
+    raw_parts[0]["source_image_index"] = 99
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
+    with (
+        patch("app.services.gemini_service._get_api_key", return_value="test-key"),
+        patch("app.services.gemini_service.genai") as mock_genai,
+    ):
+        mock_genai.GenerativeModel.return_value = mock_model
+        with pytest.raises(ValueError, match="invalid source_image_index 99"):
+            assess_vehicle_condition(
+                [_jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes()]
+            )
+
+
+def test_assess_vehicle_condition_visible_false_non_null_index() -> None:
+    """Part visible=false but Gemini returns non-null source_image_index -> coerced to null."""
+    raw_parts = _make_raw_parts()
+    raw_parts[0]["visible_in_image"] = False
+    raw_parts[0]["source_image_index"] = 2
+    raw_parts[0]["damaged"] = False
+    raw_parts[0]["severity"] = 0
+    raw_parts[0]["damage_types"] = []
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
+    with (
+        patch("app.services.gemini_service._get_api_key", return_value="test-key"),
+        patch("app.services.gemini_service.genai") as mock_genai,
+    ):
+        mock_genai.GenerativeModel.return_value = mock_model
+        result = assess_vehicle_condition([_jpeg_bytes(), _jpeg_bytes()])
+    assert result.parts[0].visible_in_image is False
+    assert result.parts[0].source_image_index is None
+
+
+def test_assess_vehicle_condition_visible_false_null_index() -> None:
+    """Part visible=false with source_image_index correctly null -> parses fine."""
+    raw_parts = _make_raw_parts()
+    raw_parts[0]["visible_in_image"] = False
+    raw_parts[0]["source_image_index"] = None
+    raw_parts[0]["damaged"] = False
+    raw_parts[0]["severity"] = 0
+    raw_parts[0]["damage_types"] = []
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
+    with (
+        patch("app.services.gemini_service._get_api_key", return_value="test-key"),
+        patch("app.services.gemini_service.genai") as mock_genai,
+    ):
+        mock_genai.GenerativeModel.return_value = mock_model
+        result = assess_vehicle_condition([_jpeg_bytes(), _jpeg_bytes()])
+    assert result.parts[0].visible_in_image is False
+    assert result.parts[0].source_image_index is None
+
+
+def test_assess_vehicle_condition_mixed() -> None:
+    """Full 25-part response with mixed visible/not-visible parts and valid source indices."""
+    raw_parts = _make_raw_parts()
+    for i in range(10):
+        raw_parts[i]["visible_in_image"] = False
+        raw_parts[i]["source_image_index"] = None
+        raw_parts[i]["damaged"] = False
+        raw_parts[i]["severity"] = 0
+        raw_parts[i]["damage_types"] = []
+    for i in range(10, 25):
+        raw_parts[i]["visible_in_image"] = True
+        raw_parts[i]["source_image_index"] = 2
+
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = MagicMock(text=json.dumps(raw_parts))
+    with (
+        patch("app.services.gemini_service._get_api_key", return_value="test-key"),
+        patch("app.services.gemini_service.genai") as mock_genai,
+    ):
+        mock_genai.GenerativeModel.return_value = mock_model
+        result = assess_vehicle_condition([_jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes()])
+    assert len(result.parts) == 25
+    assert sum(1 for p in result.parts if not p.visible_in_image) == 10
+    assert sum(1 for p in result.parts if p.visible_in_image) == 15
+    assert all(p.source_image_index == 2 for p in result.parts if p.visible_in_image)

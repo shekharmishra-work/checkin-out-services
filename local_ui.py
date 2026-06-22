@@ -19,12 +19,12 @@ from PIL import Image
 load_dotenv()
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-MODEL_NAME          = "gemini-2.5-flash"  # confirmed working — see diagnose.py
-MAX_IMAGES_WARNING  = 10        # soft limit — shows warning, still processes
-MAX_IMAGE_PX        = 1024      # longest side in pixels after resize
-JPEG_QUALITY        = 85
-MAX_RETRIES         = 3
-THUMBS_PER_ROW      = 4
+MODEL_NAME = "gemini-2.5-flash"  # confirmed working — see diagnose.py
+MAX_IMAGES_WARNING = 10  # soft limit — shows warning, still processes
+MAX_IMAGE_PX = 1024  # longest side in pixels after resize
+JPEG_QUALITY = 85
+MAX_RETRIES = 3
+THUMBS_PER_ROW = 4
 
 # Semaphore: max 5 concurrent Gemini calls app-wide across all sessions
 _api_semaphore = threading.Semaphore(5)
@@ -38,7 +38,8 @@ st.set_page_config(
 )
 
 # ─── CSS ──────────────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap');
 
@@ -130,10 +131,13 @@ div.stButton > button:hover {
 }
 div.stButton > button:active { transform: translateY(0) !important; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def get_api_key() -> str | None:
     """Read API key from st.secrets['GOOGLE_API_KEY'] or os.environ['GOOGLE_API_KEY']."""
@@ -214,20 +218,18 @@ def call_gemini_with_retry(contents: list, retries: int = MAX_RETRIES):
 
         except api_exceptions.ResourceExhausted as exc:
             last_exc = exc
-            wait = 2 ** attempt
+            wait = 2**attempt
             time.sleep(wait)
 
         except api_exceptions.ServiceUnavailable as exc:
             last_exc = exc
-            wait = 2 ** attempt
+            wait = 2**attempt
             time.sleep(wait)
 
         finally:
             _api_semaphore.release()
 
-    raise RuntimeError(
-        f"Gemini API unavailable after {retries} attempts. Last error: {last_exc}"
-    )
+    raise RuntimeError(f"Gemini API unavailable after {retries} attempts. Last error: {last_exc}")
 
 
 def parse_response(text: str) -> list[dict]:
@@ -260,7 +262,7 @@ st.markdown(
 st.markdown(
     '<div style="text-align:center">'
     '<span class="badge">🟢 Powered by Gemini 2.5 Flash</span>'
-    '</div>',
+    "</div>",
     unsafe_allow_html=True,
 )
 
@@ -317,9 +319,7 @@ if uploaded_files:
         try:
             with st.spinner(f"⏳ Validating {n} image{'s' if n > 1 else ''} with Gemini…"):
                 # 1. Preprocess all images
-                processed: list[Image.Image] = [
-                    preprocess_image(f) for f in uploaded_files
-                ]
+                processed: list[Image.Image] = [preprocess_image(f) for f in uploaded_files]
 
                 # 2. Build single API call: [img1, img2, ..., imgN, prompt]
                 prompt = build_prompt(n)
@@ -338,11 +338,11 @@ if uploaded_files:
 
             passed = 0
             for entry in results:
-                idx    = entry.get("index", "?")
-                valid  = entry.get("valid", False)
+                idx = entry.get("index", "?")
+                valid = entry.get("valid", False)
                 reason = entry.get("reason") or ""
-                fname  = uploaded_files[idx - 1].name if isinstance(idx, int) and idx <= n else ""
-                label  = f"Image {idx}" + (f" — *{fname}*" if fname else "")
+                fname = uploaded_files[idx - 1].name if isinstance(idx, int) and idx <= n else ""
+                label = f"Image {idx}" + (f" — *{fname}*" if fname else "")
 
                 if valid:
                     st.success(f"✅ {label}: Valid")
@@ -353,7 +353,7 @@ if uploaded_files:
             # 6. Summary
             st.markdown(
                 f'<div class="summary-box">📊 {passed} of {n} '
-                f'image{"s" if n > 1 else ""} passed validation</div>',
+                f"image{'s' if n > 1 else ''} passed validation</div>",
                 unsafe_allow_html=True,
             )
             st.markdown("</div>", unsafe_allow_html=True)

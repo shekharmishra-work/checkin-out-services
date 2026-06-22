@@ -80,9 +80,7 @@ def _fake_identity() -> IdentityResult:
 
 
 def _post_images(n: int = 2) -> dict[str, Any]:
-    files = [
-        ("images", (f"img_{i}.jpg", _jpeg_bytes(), "image/jpeg")) for i in range(n)
-    ]
+    files = [("images", (f"img_{i}.jpg", _jpeg_bytes(), "image/jpeg")) for i in range(n)]
     with (
         patch(
             "app.routers.image_validation.gemini_validate",

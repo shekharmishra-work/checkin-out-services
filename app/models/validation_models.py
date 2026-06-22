@@ -15,10 +15,10 @@ class MetadataResult(BaseModel):
     """EXIF metadata extraction result for a single image."""
 
     has_exif: bool
-    capture_date: date | None       # parsed from EXIF DateTimeOriginal, None if absent
-    current_date: date              # datetime.date.today() at time of request, always present
-    is_same_day: bool                # capture_date == current_date, False if capture_date is None
-    meta_reason: str | None          # short text when has_exif is False or capture_date is None
+    capture_date: date | None  # parsed from EXIF DateTimeOriginal, None if absent
+    current_date: date  # datetime.date.today() at time of request, always present
+    is_same_day: bool  # capture_date == current_date, False if capture_date is None
+    meta_reason: str | None  # short text when has_exif is False or capture_date is None
 
 
 # ── Gemini vision ─────────────────────────────────────────────────────────────
@@ -131,6 +131,7 @@ class PartCondition(BaseModel):
 
     part: VehiclePart
     visible_in_image: bool
+    source_image_index: int | None
     damaged: bool
     damage_types: list[DamageType]  # always empty list when damaged=False
     severity: int  # 0=none, 1=minor, 2=moderate, 3=severe

@@ -69,10 +69,7 @@ async def validate_images_endpoint(
         validation_results = gemini_validate(raw_bytes_list)
     except Exception as exc:
         logger.error("Gemini validation failed: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gemini validation failed: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Gemini validation failed: {exc}") from exc
 
     # 4. Identity cross-check
     identity = check_vehicle_identity(validation_results)
@@ -148,4 +145,3 @@ async def assess_condition_endpoint(
         ) from exc
 
     return result
-
