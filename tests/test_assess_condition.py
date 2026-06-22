@@ -432,7 +432,7 @@ def test_assess_vehicle_condition_visible_true_out_of_range_index_raises() -> No
         patch("app.services.gemini_service.genai") as mock_genai,
     ):
         mock_genai.GenerativeModel.return_value = mock_model
-        with pytest.raises(ValueError, match="invalid source_image_index 99"):
+        with pytest.raises(ValueError, match="has invalid index 99"):
             assess_vehicle_condition(
                 [_jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes(), _jpeg_bytes()]
             )

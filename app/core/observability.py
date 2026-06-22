@@ -7,7 +7,9 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor  # type: ignore[import-not-found]
+from opentelemetry.instrumentation.logging import (  # type: ignore[import-not-found]
+    LoggingInstrumentor,
+)
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
@@ -59,9 +61,7 @@ def _configure_traces(
     FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
 
 
-def _configure_metrics(
-    resource: Resource, endpoint: str, headers: dict[str, str]
-) -> None:
+def _configure_metrics(resource: Resource, endpoint: str, headers: dict[str, str]) -> None:
     reader = PeriodicExportingMetricReader(
         OTLPMetricExporter(
             endpoint=_otlp_endpoint(endpoint, "metrics"),
@@ -73,9 +73,7 @@ def _configure_metrics(
     metrics.set_meter_provider(meter_provider)
 
 
-def _configure_logs(
-    resource: Resource, endpoint: str, headers: dict[str, str]
-) -> None:
+def _configure_logs(resource: Resource, endpoint: str, headers: dict[str, str]) -> None:
     logger_provider = LoggerProvider(resource=resource)
     logger_provider.add_log_record_processor(
         BatchLogRecordProcessor(
