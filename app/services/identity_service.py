@@ -42,9 +42,7 @@ def check_vehicle_identity(results: list[ImageValidationResult]) -> IdentityResu
             unique_plates=[],
             consensus_plate=None,
             consensus_color=consensus_color,
-            identity_reason=(
-                "No number plate visible in any image — manual verification required"
-            ),
+            identity_reason=("No number plate visible in any image — manual verification required"),
         )
 
     if len(unique_plates) == 1:
@@ -64,7 +62,5 @@ def check_vehicle_identity(results: list[ImageValidationResult]) -> IdentityResu
         unique_plates=unique_plates,
         consensus_plate=None,
         consensus_color=consensus_color,
-        identity_reason=(
-            "Plates detected do not all match — possible mixed vehicle images"
-        ),
+        identity_reason=("Plates detected do not all match — possible mixed vehicle images"),
     )

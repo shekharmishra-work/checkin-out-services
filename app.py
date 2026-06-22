@@ -22,7 +22,8 @@ st.set_page_config(
 )
 
 # ─── CSS ──────────────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap');
 
@@ -89,10 +90,13 @@ div.stButton > button:hover {
     box-shadow: 0 8px 28px rgba(16,185,129,.55) !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def thumbnail_grid(files: list) -> None:
     """Render uploaded images as a responsive thumbnail grid."""

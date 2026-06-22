@@ -28,6 +28,7 @@ def get_api_key() -> str:
     from pathlib import Path
 
     from dotenv import load_dotenv
+
     dotenv_path = Path(__file__).resolve().parent.parent / ".env"
     load_dotenv(dotenv_path=dotenv_path, override=True)
     key = os.environ.get("GOOGLE_API_KEY")
@@ -83,6 +84,7 @@ def build_prompt(num_images: int) -> str:
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "Hello, World!"}
@@ -118,8 +120,7 @@ async def validate_images(files: list[UploadFile] = File(...)) -> Any:
     except RuntimeError as e:
         logger.error("API configuration error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server configuration error"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server configuration error"
         ) from e
 
     # 3. Call Gemini
@@ -131,18 +132,17 @@ async def validate_images(files: list[UploadFile] = File(...)) -> Any:
     except api_exceptions.ResourceExhausted as e:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="API quota exceeded. Please try again later."
+            detail="API quota exceeded. Please try again later.",
         ) from e
     except api_exceptions.ServiceUnavailable as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Vision API is currently unavailable."
+            detail="Vision API is currently unavailable.",
         ) from e
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Validation failed: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Validation failed: {str(e)}"
         ) from e
 
     # 4. Parse JSON Response
@@ -157,6 +157,5 @@ async def validate_images(files: list[UploadFile] = File(...)) -> Any:
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON. Raw response: {raw_text}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to parse AI response"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to parse AI response"
         ) from e

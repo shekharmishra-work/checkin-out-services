@@ -5,7 +5,7 @@ A production-ready FastAPI service for validating and assessing EV taxi images d
 ## Features
 
 - **Gate-Check Validation** (`POST /api/v1/validate-images`): Fast validation of vehicle images. Checks for visual clarity, reads license plates, verifies the vehicle color, and detects obvious damage.
-- **Full Damage Inspection** (`POST /api/v1/assess-condition`): A comprehensive dual-call workflow designed for the check-in/checkout lifecycle. In addition to the gate-check, it outputs a strict 25-part structural condition assessment with severity tracking.
+- **Full Damage Inspection** (`POST /api/v1/assess-condition`): A comprehensive dual-call workflow designed for the check-in/checkout lifecycle. In addition to the gate-check, it outputs a strict 25-part structural condition assessment with severity tracking and direct image-level attribution.
 - **EXIF Spoof Protection**: Extracts `DateTimeOriginal` from raw image bytes to verify the photos were taken today and are not screenshots or old uploads.
 - **Identity Consensus**: Correlates license plates across multiple images to build a consensus identity for the vehicle.
 - **Stateless Execution**: The service strictly performs inference and validation without persisting data locally, returning a structured JSON payload for upstream backend systems to store.

@@ -58,6 +58,7 @@ def _get_api_key() -> str:
     from pathlib import Path
 
     from dotenv import load_dotenv
+
     dotenv_path = Path(__file__).resolve().parent.parent.parent / ".env"
     load_dotenv(dotenv_path=dotenv_path, override=True)
     key = os.environ.get("GOOGLE_API_KEY")
@@ -135,9 +136,7 @@ def _call_with_retry(model: genai.GenerativeModel, contents: list[object]) -> st
         except Exception:
             raise
 
-    raise RuntimeError(
-        f"Gemini call failed after {MAX_RETRIES} attempts"
-    ) from last_exc
+    raise RuntimeError(f"Gemini call failed after {MAX_RETRIES} attempts") from last_exc
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -158,9 +157,7 @@ def _validate_images_google(image_bytes_list: list[bytes]) -> list[ImageValidati
     try:
         parsed: list[dict[str, object]] = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Gemini returned non-JSON response. Raw text: {raw_text!r}"
-        ) from exc
+        raise ValueError(f"Gemini returned non-JSON response. Raw text: {raw_text!r}") from exc
 
     results: list[ImageValidationResult] = []
     for item in parsed:
@@ -188,9 +185,7 @@ def _validate_images_openrouter(
         content_list.append(
             {
                 "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{img_b64}"
-                },
+                "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"},
             }
         )
 
@@ -253,17 +248,13 @@ def _validate_images_openrouter(
             )
             time.sleep(wait)
     else:
-        raise RuntimeError(
-            f"OpenRouter call failed after {MAX_RETRIES} attempts"
-        ) from last_exc
+        raise RuntimeError(f"OpenRouter call failed after {MAX_RETRIES} attempts") from last_exc
 
     cleaned = _strip_fences(raw_text)
     try:
         parsed: list[dict[str, object]] = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"OpenRouter returned non-JSON response. Raw text: {raw_text!r}"
-        ) from exc
+        raise ValueError(f"OpenRouter returned non-JSON response. Raw text: {raw_text!r}") from exc
 
     results: list[ImageValidationResult] = []
     for item in parsed:
@@ -288,6 +279,7 @@ def validate_images(image_bytes_list: list[bytes]) -> list[ImageValidationResult
     from pathlib import Path
 
     from dotenv import load_dotenv
+
     dotenv_path = Path(__file__).resolve().parent.parent.parent / ".env"
     load_dotenv(dotenv_path=dotenv_path, override=True)
 
@@ -300,13 +292,14 @@ def validate_images(image_bytes_list: list[bytes]) -> list[ImageValidationResult
 
 # ── Condition assessment (new — does NOT modify validate_images) ──────────────
 
-_CONDITION_PROMPT = """\
-You are a vehicle damage inspection AI. Across ALL the provided images of this vehicle,
-assess the condition of each of the following 25 parts. The images may show different
-angles of the same vehicle — use all of them together to form a complete picture.
 
-You MUST return an entry for every single part — even if undamaged, even if not visible
-in any image.
+def _build_condition_prompt(n: int) -> str:
+    return f"""You are a vehicle damage inspection AI. You are given {n} images of this vehicle,
+numbered Image 1 through Image {n} in the order provided. The images may show
+different angles of the same vehicle — use all of them together to assess every part.
+
+Assess each of the following 25 parts. You MUST return an entry for every single
+part — even if undamaged, even if not visible in any image.
 
 Parts to assess (use these exact names):
 front_bumper, front_hood, front_windshield, front_left_headlight, front_right_headlight,
@@ -316,27 +309,35 @@ rear_bumper, rear_trunk, rear_windshield, left_tail_light, right_tail_light,
 roof_panel, front_left_wheel, front_right_wheel, rear_left_wheel, rear_right_wheel
 
 For each part return exactly this structure:
-{
+{{
   "part": "<exact name from list above>",
   "visible_in_image": true or false,
+  "source_image_index": <integer 1 to {n}> or null,
   "damaged": true or false,
   "damage_types": [] or subset of ["dent","scratch","crack","missing_part",
                                     "discoloration","broken_glass","rust"],
   "severity": 0 (none) / 1 (minor) / 2 (moderate) / 3 (severe),
   "confidence": 0.0 to 1.0
-}
+}}
 
 Rules:
-- If part not visible in any image: visible_in_image=false, damaged=false,
-  severity=0, confidence=0, damage_types=[]
-- If visible but undamaged: damaged=false, severity=0, damage_types=[]
+- If a part is NOT visible in ANY image: visible_in_image=false,
+  source_image_index=null, damaged=false, severity=0, confidence=0, damage_types=[]
+- If a part IS visible in one or more images: visible_in_image=true, and
+  source_image_index MUST be the number (1 to {n}) of the single image where
+  this part is most clearly visible — pick exactly one, even if visible in
+  several images
+- If visible but undamaged: damaged=false, severity=0, damage_types=[],
+  but source_image_index is still required
 - severity MUST be 0 when damaged is false
 - damage_types MUST be empty list when damaged is false
-- confidence reflects how clearly you can assess this part from all images combined
+- confidence reflects how clearly the part is visible in the chosen source image
+- source_image_index must never be a number outside the range 1 to {n}
+- source_image_index must never be null when visible_in_image is true, and
+  must always be null when visible_in_image is false
 
 Return ONLY a raw JSON array of exactly 25 objects.
-No markdown, no backticks, no explanation. Nothing else.\
-"""
+No markdown, no backticks, no explanation. Nothing else."""
 
 
 def assess_vehicle_condition(image_bytes_list: list[bytes]) -> VehicleCondition:  # noqa: F821
@@ -381,7 +382,8 @@ def assess_vehicle_condition(image_bytes_list: list[bytes]) -> VehicleCondition:
     model = genai.GenerativeModel(MODEL_NAME)
 
     pil_images = [_preprocess(b) for b in image_bytes_list]
-    contents: list[object] = [*pil_images, _CONDITION_PROMPT]
+    prompt = _build_condition_prompt(len(image_bytes_list))
+    contents: list[object] = [*pil_images, prompt]
 
     raw_text = _call_with_retry(model, contents)
     cleaned = _strip_fences(raw_text)
@@ -394,22 +396,38 @@ def assess_vehicle_condition(image_bytes_list: list[bytes]) -> VehicleCondition:
         ) from exc
 
     if len(raw_parts) != 25:
-        raise ValueError(
-            f"Gemini returned {len(raw_parts)} parts, expected 25"
-        )
+        raise ValueError(f"Gemini returned {len(raw_parts)} parts, expected 25")
 
     # Validate all part names against the enum before building models
     valid_part_names = {member.value for member in VehiclePart}
+    n_images = len(image_bytes_list)
     for item in raw_parts:
         part_name = item.get("part")
         if part_name not in valid_part_names:
-            raise ValueError(
-                f"assess_vehicle_condition: unknown part name {part_name!r}"
-            )
+            raise ValueError(f"assess_vehicle_condition: unknown part name {part_name!r}")
 
-    parts: list[PartCondition] = [
-        PartCondition.model_validate(item) for item in raw_parts
-    ]
+        visible = item.get("visible_in_image")
+        source_index = item.get("source_image_index")
+
+        if visible is True:
+            if source_index is None:
+                raise ValueError(
+                    f"Part {part_name} marked visible but source_image_index is missing"
+                )
+            if not isinstance(source_index, int) or not (1 <= source_index <= n_images):
+                raise ValueError(
+                    f"Part {part_name} has invalid index {source_index}, expected 1-{n_images}"
+                )
+        elif visible is False:
+            if source_index is not None:
+                logger.warning(
+                    "Part %s marked not visible but has source_image_index %s. Coercing to None.",
+                    part_name,
+                    source_index,
+                )
+                item["source_image_index"] = None
+
+    parts: list[PartCondition] = [PartCondition.model_validate(item) for item in raw_parts]
     overall_damage_score = sum(p.severity for p in parts)
 
     return VehicleCondition(overall_damage_score=overall_damage_score, parts=parts)
@@ -489,4 +507,3 @@ def validate_and_assess(
         results=image_results,
         vehicle_condition=vehicle_condition,
     )
-
