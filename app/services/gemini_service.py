@@ -144,8 +144,8 @@ def _call_with_retry(model: genai.GenerativeModel, contents: list[object]) -> st
 
 def _validate_images_google(image_bytes_list: list[bytes]) -> list[ImageValidationResult]:
     """Validate images using Google Generative AI SDK."""
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(MODEL_NAME)
+    genai.configure(api_key=_get_api_key())  # type: ignore[attr-defined]
+    model = genai.GenerativeModel(MODEL_NAME)  # type: ignore[attr-defined]
 
     pil_images = [_preprocess(b) for b in image_bytes_list]
     prompt = _build_prompt(len(pil_images))
@@ -378,8 +378,8 @@ def assess_vehicle_condition(image_bytes_list: list[bytes]) -> VehicleCondition:
     dotenv_path = Path(__file__).resolve().parent.parent.parent / ".env"
     load_dotenv(dotenv_path=dotenv_path, override=True)
 
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(MODEL_NAME)
+    genai.configure(api_key=_get_api_key())  # type: ignore[attr-defined]
+    model = genai.GenerativeModel(MODEL_NAME)  # type: ignore[attr-defined]
 
     pil_images = [_preprocess(b) for b in image_bytes_list]
     prompt = _build_condition_prompt(len(image_bytes_list))

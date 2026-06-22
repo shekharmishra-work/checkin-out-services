@@ -153,8 +153,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # 2. Configure Gemini
         try:
-            genai.configure(api_key=get_api_key())
-            model = genai.GenerativeModel(MODEL_NAME)
+            genai.configure(api_key=get_api_key())  # type: ignore[attr-defined]
+            model = genai.GenerativeModel(MODEL_NAME)  # type: ignore[attr-defined]
         except RuntimeError as e:
             logger.error("API configuration error: %s", e)
             raise HTTPException(
