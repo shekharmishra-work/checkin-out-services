@@ -63,7 +63,7 @@ jobs:
           test -n "${{ needs.config.outputs.project_id }}" || { echo "project_id is required" >&2; exit 2; }
           test -n "${{ needs.config.outputs.region }}" || { echo "region is required" >&2; exit 2; }
           test -n "${{ needs.config.outputs.workload_identity_provider }}" || { echo "workload_identity_provider is required" >&2; exit 2; }
-          test -n "${{ needs.config.outputs.service_account }}" || { echo "service_account is required" >&2; exit 2; }
+          test -n "${{ needs.config.outputs.deploy_service_account }}" || { echo "deploy_service_account is required" >&2; exit 2; }
           test -n "${{ needs.config.outputs.artifact_registry_repository }}" || { echo "artifact_registry_repository is required" >&2; exit 2; }
           test -n "${{ needs.config.outputs.cloud_run_service }}" || { echo "cloud_run_service is required" >&2; exit 2; }
 
@@ -71,7 +71,7 @@ jobs:
         uses: google-github-actions/auth@v3.0.0
         with:
           workload_identity_provider: ${{ needs.config.outputs.workload_identity_provider }}
-          service_account: ${{ needs.config.outputs.service_account }}
+          service_account: ${{ needs.config.outputs.deploy_service_account }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3.0.1
