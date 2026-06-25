@@ -17,6 +17,10 @@ dependencies = [
     "google-generativeai>=0.8.0",
     "Pillow>=11.0.0",
     "python-multipart>=0.0.9",
+    "gspread>=6.0.0",
+    "google-auth>=2.0.0",
+    "google-cloud-bigquery>=3.42.1",
+    "google-cloud-storage>=3.4.1",
 ]
 
 [dependency-groups]
@@ -38,6 +42,7 @@ packages = ["app"]
 [tool.ruff]
 target-version = "py313"
 line-length = 100
+exclude = ["test_runner.py"]
 
 [tool.ruff.lint]
 select = [
@@ -54,6 +59,9 @@ select = [
 ignore = [
     "B008",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"app/main.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.13"

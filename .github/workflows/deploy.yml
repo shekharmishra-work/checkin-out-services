@@ -179,7 +179,7 @@ jobs:
             --project="${{ needs.config.outputs.project_id }}" \
             --region="${{ needs.config.outputs.region }}" \
             --image="${{ steps.metadata.outputs.image_base }}@${{ steps.build.outputs.digest }}" \
-            --update-env-vars="SERVICE_VERSION=${{ steps.metadata.outputs.service_version }}" \
+            --update-env-vars="SERVICE_VERSION=${{ steps.metadata.outputs.service_version }},GCP_PROJECT_ID=${{ needs.config.outputs.project_id }},BQ_DATASET_ID=AI_checkin_out,GCS_BUCKET_NAME=dk-image-storage-common" \
             --platform=managed \
             --quiet
 

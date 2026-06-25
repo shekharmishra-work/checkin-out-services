@@ -4,24 +4,39 @@ import logging
 import os
 import re
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
-import google.generativeai as genai
-from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile, status
-from fastapi.responses import PlainTextResponse
-from google.api_core import exceptions as api_exceptions
-from PIL import Image
+from dotenv import load_dotenv
 
-from app.core.config import Settings, get_settings
-from app.core.logging import configure_logging
-from app.core.middleware import (
+# Load .env FIRST before other app imports so module-level flags (BQ/GCS_ENABLED) are set
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env", override=True)
+
+import google.generativeai as genai  # noqa: E402
+from fastapi import (  # noqa: E402
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import PlainTextResponse  # noqa: E402
+from google.api_core import exceptions as api_exceptions  # noqa: E402
+from PIL import Image  # noqa: E402
+
+from app.core.config import Settings, get_settings  # noqa: E402
+from app.core.logging import configure_logging  # noqa: E402
+from app.core.middleware import (  # noqa: E402
     get_request_duration_ms,
     get_request_trace_id,
     log_actionable_requests,
     mark_request_failure_logged,
 )
-from app.core.observability import configure_observability
-from app.routers.image_validation import router as image_validation_router
+from app.core.observability import configure_observability  # noqa: E402
+from app.routers.image_validation import router as image_validation_router  # noqa: E402
+from app.services.bq_service import ensure_tables_exist  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +137,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(image_validation_router)
     configure_observability(app, app_settings)
+
+    @app.on_event("startup")
+    async def startup_event() -> None:
+        ensure_tables_exist()
 
     # ─── Routes ───────────────────────────────────────────────────────────────
 

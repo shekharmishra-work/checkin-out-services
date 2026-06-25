@@ -17,8 +17,10 @@ POST /api/v1/assess-condition  (full inspection — 2 Gemini calls)
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
+from uuid import uuid4
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 
 from app.models.validation_models import (
     AssessConditionResult,
@@ -30,6 +32,7 @@ from app.services.gemini_service import validate_and_assess
 from app.services.gemini_service import validate_images as gemini_validate
 from app.services.identity_service import check_vehicle_identity
 from app.services.metadata_service import extract_metadata_status
+from app.services.persistence_service import persist_all_outputs
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +44,9 @@ router = APIRouter(prefix="/api/v1", tags=["image-validation"])
 
 @router.post("/validate-images", response_model=ValidateImagesResponse)
 async def validate_images_endpoint(
+    background_tasks: BackgroundTasks,
     images: list[UploadFile] = File(...),
+    check_type: str = "in",
 ) -> ValidateImagesResponse:
     """Validate a batch of EV taxi images.
 
@@ -101,11 +106,29 @@ async def validate_images_endpoint(
         damage_flagged=damage_flagged,
     )
 
-    return ValidateImagesResponse(
+    response = ValidateImagesResponse(
         submission_summary=summary,
         identity=identity,
         results=image_results,
     )
+
+    session_id = f"sess-{uuid4().hex[:8]}-{date.today()}-{check_type}"
+    background_tasks.add_task(
+        persist_all_outputs,
+        audit_id=str(uuid4()),
+        session_id=session_id,
+        check_type=check_type,
+        image_bytes_list=raw_bytes_list,
+        filenames=filenames,
+        summary=response.submission_summary,
+        identity=response.identity,
+        results=response.results,
+        vehicle_condition=None,
+        llm_used="gemini-2.5-flash",
+        created_at=datetime.now(),
+    )
+
+    return response
 
 
 # ── Endpoint 2: full inspection (gate check + damage snapshot) ────────────────
@@ -113,7 +136,9 @@ async def validate_images_endpoint(
 
 @router.post("/assess-condition", response_model=AssessConditionResult)
 async def assess_condition_endpoint(
+    background_tasks: BackgroundTasks,
     images: list[UploadFile] = File(...),
+    check_type: str = "in",
 ) -> AssessConditionResult:
     """Full vehicle inspection: gate check + structured part-by-part damage snapshot.
 
@@ -143,5 +168,21 @@ async def assess_condition_endpoint(
             status_code=500,
             detail=f"Assessment failed: {exc}",
         ) from exc
+
+    session_id = f"sess-{uuid4().hex[:8]}-{date.today()}-{check_type}"
+    background_tasks.add_task(
+        persist_all_outputs,
+        audit_id=str(uuid4()),
+        session_id=session_id,
+        check_type=check_type,
+        image_bytes_list=raw_bytes_list,
+        filenames=filenames,
+        summary=result.submission_summary,
+        identity=result.identity,
+        results=result.results,
+        vehicle_condition=result.vehicle_condition,
+        llm_used="gemini-2.5-flash",
+        created_at=datetime.now(),
+    )
 
     return result

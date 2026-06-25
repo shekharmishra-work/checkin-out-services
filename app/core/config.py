@@ -20,6 +20,13 @@ class Settings(BaseSettings):
         default=None, alias="OTEL_EXPORTER_OTLP_HEADERS"
     )
 
+    google_sheets_credentials_path: str = Field(
+        default="./service-account-key.json", alias="GOOGLE_SHEETS_CREDENTIALS_PATH"
+    )
+    google_sheets_spreadsheet_id: str = Field(
+        default="1GSoCeDO3stPvl3N3Pr1jgnN-ISjZc8TSqUfx1Mciuzc", alias="GOOGLE_SHEETS_SPREADSHEET_ID"
+    )
+
     @property
     def observability_enabled(self) -> bool:
         return bool(self.otlp_endpoint and self.otlp_headers)
